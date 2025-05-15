@@ -23,7 +23,7 @@
             transform: translateY(-50%);
             text-align: center;
             color: white;
-            background-color: rgba(0, 0, 0, 0.5);
+            background-color: rgba(0, 0, 0, 0.7);
             padding: 20px;
             z-index: 100;
             display: block;
@@ -57,30 +57,83 @@
             left: 0;
             top: 9px;
         }
+        #sketchfab-embed {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+        #threejs-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            pointer-events: none;
+        }
+        #threejs-container.active {
+            pointer-events: auto;
+        }
+        .mode-switch {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 30;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            border: 1px solid white;
+        }
     </style>
 </head>
 <body>
-    <div id="container"></div>
+    <!-- Contenedor para Sketchfab -->
+    <iframe id="sketchfab-embed" 
+            src="https://sketchfab.com/models/bdaa8e9990884bba9a0b0a9479e83612/embed?autostart=1&ui_controls=0&ui_infos=0&ui_stop=0&ui_theatre=0&ui_watermark=0&ui_settings=0" 
+            frameborder="0" 
+            allow="autoplay; fullscreen; vr" 
+            mozallowfullscreen="true" 
+            webkitallowfullscreen="true">
+    </iframe>
+
+    <!-- Contenedor para Three.js -->
+    <div id="threejs-container"></div>
+    
+    <!-- Instrucciones -->
     <div id="instructions">
         <h2>Visualizador 3D Interior</h2>
         <p>Haz clic en la pantalla para activar los controles</p>
         <p>Usa WASD para moverte, el ratón para mirar alrededor</p>
         <p>Presiona ESC para salir del modo PointerLock</p>
+        <p>Haz clic en el botón abajo para cambiar entre modos VR y Personaje</p>
     </div>
+    
+    <!-- Cruz de mira -->
     <div id="crosshair"></div>
+    
+    <!-- Botón para cambiar modo -->
+    <div class="mode-switch" id="mode-switch">Modo Personaje</div>
 
+    <!-- Three.js y dependencias -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
     
     <script>
         // Variables globales
-        let camera, scene, renderer, controls, model, character;
+        let camera, scene, renderer, controls, character;
         let mixer, clock, animations, currentAction;
         const moveSpeed = 3;
         const keys = {
             w: false, a: false, s: false, d: false
         };
+        let isCharacterMode = false;
 
         // Configuración de posición inicial
         const initialPosition = {
@@ -98,26 +151,23 @@
             
             // Crear la escena
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB); // Fondo azul cielo
+            scene.background = null; // Fondo transparente
             
             // Configurar el renderizador
             renderer = new THREE.WebGLRenderer({ 
                 antialias: true,
+                alpha: true,
                 logarithmicDepthBuffer: true
             });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            document.getElementById('container').appendChild(renderer.domElement);
-
-            // Habilitar clipping
-            renderer.localClippingEnabled = true;
+            document.getElementById('threejs-container').appendChild(renderer.domElement);
 
             // Inicializar reloj para animaciones
             clock = new THREE.Clock();
 
-            // Cargar entorno y personaje
-            loadEnvironment();
+            // Cargar personaje
             loadCharacter();
 
             // Configurar controles
@@ -125,78 +175,21 @@
 
             // Manejar redimensionamiento
             window.addEventListener('resize', onWindowResize);
-        }
 
-        // Función para cargar el entorno
-        function loadEnvironment() {
-            const loader = new THREE.GLTFLoader();
-            loader.load(
-                'conference_room_-_3d.glb',
-                function(gltf) {
-                    model = gltf.scene;
-                    let spawnPointFound = false;
-                    
-                    model.traverse(function(node) {
-                        if (node.isMesh) {
-                            node.material.side = THREE.DoubleSide;
-                            node.material.needsUpdate = true;
-                            node.castShadow = true;
-                            node.receiveShadow = true;
-                            
-                            if (node.name.toLowerCase().includes('spawn') || 
-                                node.name.toLowerCase().includes('start')) {
-                                camera.position.copy(node.position);
-                                camera.position.y += 1.6;
-                                spawnPointFound = true;
-                                node.visible = false;
-                            }
-                            
-                            if (node.name.toLowerCase().includes('window') || 
-                                node.name.toLowerCase().includes('glass')) {
-                                node.material.transparent = true;
-                                node.material.opacity = 0.2;
-                            }
-                        }
-                    });
-                    
-                    scene.add(model);
-                    
-                    if (!spawnPointFound) {
-                        camera.position.set(
-                            initialPosition.x,
-                            initialPosition.y,
-                            initialPosition.z
-                        );
-                    }
-                    
-                    camera.lookAt(
-                        initialPosition.lookAtX,
-                        initialPosition.y,
-                        initialPosition.lookAtZ
-                    );
-                    
-                    // Configurar luces
-                    const box = new THREE.Box3().setFromObject(model);
-                    const center = box.getCenter(new THREE.Vector3());onWindowResize
-                    setupInteriorLighting(center);
-                },
-                undefined,
-                function(error) {
-                    console.error('Error al cargar el entorno:', error);
-                }
-            );
+            // Configurar botón de modo
+            document.getElementById('mode-switch').addEventListener('click', toggleMode);
         }
 
         // Función para cargar el personaje animado
         function loadCharacter() {
             const loader = new THREE.GLTFLoader();
             loader.load(
-                'talking.glb',
+                'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/Xbot.glb',
                 function(gltf) {
                     character = gltf.scene;
                     
                     // Posición y escala del personaje
-                    character.position.set(1, 0, 1);
+                    character.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
                     character.scale.set(0.8, 0.8, 0.8);
                     
                     // Configurar sombras
@@ -222,12 +215,30 @@
                     }
                     
                     scene.add(character);
+                    
+                    // Posicionar cámara detrás del personaje
+                    camera.position.copy(character.position);
+                    camera.position.z += 2;
+                    camera.position.y += 1.6;
+                    camera.lookAt(character.position);
                 },
                 undefined,
                 function(error) {
                     console.error('Error al cargar el personaje:', error);
+                    // Personaje de respaldo si falla la carga
+                    createFallbackCharacter();
                 }
             );
+        }
+
+        // Crear personaje simple si falla la carga
+        function createFallbackCharacter() {
+            const geometry = new THREE.BoxGeometry(0.5, 1.8, 0.5);
+            const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+            character = new THREE.Mesh(geometry, material);
+            character.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+            character.castShadow = true;
+            scene.add(character);
         }
 
         // Función para controlar animaciones
@@ -244,56 +255,12 @@
             }
         }
 
-        // Configurar iluminación
-        function setupInteriorLighting(roomCenter) {
-            scene.fog = new THREE.FogExp2(0x87CEEB, 0.01);
-            
-            // Luz ambiental
-            const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-            scene.add(ambientLight);
-
-            // Luz solar principal
-            const sunLight = new THREE.DirectionalLight(0xfff4c2, 1.5);
-            sunLight.position.set(5, 10, 7);
-            sunLight.castShadow = true;
-            sunLight.shadow.mapSize.width = 4096;
-            sunLight.shadow.mapSize.height = 4096;
-            sunLight.shadow.camera.near = 0.5;
-            sunLight.shadow.camera.far = 50;
-            scene.add(sunLight);
-
-            // Luces adicionales
-            const light1 = new THREE.PointLight(0xffeedd, 0.8, 10, 2);
-            light1.position.set(roomCenter.x + 3, 2.5, roomCenter.z);
-            light1.castShadow = true;
-            scene.add(light1);
-
-            const light2 = new THREE.PointLight(0xddddff, 0.6, 10, 2);
-            light2.position.set(roomCenter.x - 3, 2.5, roomCenter.z + 2);
-            light2.castShadow = true;
-            scene.add(light2);
-
-            // Luz de relleno
-            const fillLight = new THREE.DirectionalLight(0xccffff, 0.4);
-            fillLight.position.set(-3, 5, 2);
-            scene.add(fillLight);
-            
-            // Luces para ventanas
-            const windowLight1 = new THREE.PointLight(0xfff4c2, 1.2, 15);
-            windowLight1.position.set(roomCenter.x + 5, 2, roomCenter.z);
-            scene.add(windowLight1);
-
-            const windowLight2 = new THREE.PointLight(0xfff4c2, 1.2, 15);
-            windowLight2.position.set(roomCenter.x - 5, 2, roomCenter.z);
-            scene.add(windowLight2);
-        }
-
         // Configurar controles
         function setupControls() {
             controls = new THREE.PointerLockControls(camera, document.body);
             
             document.addEventListener('click', function() {
-                if (!controls.isLocked) {
+                if (isCharacterMode && !controls.isLocked) {
                     controls.lock();
                 }
             });
@@ -314,6 +281,8 @@
 
         // Manejar teclas presionadas
         function onKeyDown(event) {
+            if (!isCharacterMode) return;
+            
             switch (event.code) {
                 case 'KeyW': keys.w = true; break;
                 case 'KeyA': keys.a = true; break;
@@ -324,6 +293,8 @@
 
         // Manejar teclas liberadas
         function onKeyUp(event) {
+            if (!isCharacterMode) return;
+            
             switch (event.code) {
                 case 'KeyW': keys.w = false; break;
                 case 'KeyA': keys.a = false; break;
@@ -339,6 +310,39 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
+        // Cambiar entre modos
+        function toggleMode() {
+            isCharacterMode = !isCharacterMode;
+            
+            if (isCharacterMode) {
+                document.getElementById('threejs-container').classList.add('active');
+                document.getElementById('mode-switch').textContent = 'Modo VR';
+                document.getElementById('sketchfab-embed').style.pointerEvents = 'none';
+                
+                // Posicionar personaje y cámara
+                if (character) {
+                    camera.position.copy(character.position);
+                    camera.position.z += 2;
+                    camera.position.y += 1.6;
+                    camera.lookAt(character.position);
+                }
+                
+                // Desbloquear controles si estaban bloqueados
+                if (controls.isLocked) {
+                    controls.unlock();
+                }
+            } else {
+                document.getElementById('threejs-container').classList.remove('active');
+                document.getElementById('mode-switch').textContent = 'Modo Personaje';
+                document.getElementById('sketchfab-embed').style.pointerEvents = 'auto';
+                
+                // Desbloquear controles
+                if (controls.isLocked) {
+                    controls.unlock();
+                }
+            }
+        }
+
         // Bucle de animación
         function animate() {
             requestAnimationFrame(animate);
@@ -351,18 +355,36 @@
             }
             
             // Control de movimiento
-            if (controls.isLocked) {
+            if (isCharacterMode && controls.isLocked) {
                 const deltaTime = moveSpeed * 0.016;
                 
-                if (keys.w) controls.moveForward(deltaTime);
-                if (keys.s) controls.moveForward(-deltaTime);
-                if (keys.a) controls.moveRight(-deltaTime);
-                if (keys.d) controls.moveRight(deltaTime);
+                if (keys.w) {
+                    controls.moveForward(deltaTime);
+                    if (character) character.position.copy(controls.getObject().position);
+                }
+                if (keys.s) {
+                    controls.moveForward(-deltaTime);
+                    if (character) character.position.copy(controls.getObject().position);
+                }
+                if (keys.a) {
+                    controls.moveRight(-deltaTime);
+                    if (character) character.position.copy(controls.getObject().position);
+                }
+                if (keys.d) {
+                    controls.moveRight(deltaTime);
+                    if (character) character.position.copy(controls.getObject().position);
+                }
                 
-                // Cambiar animación según movimiento
-                if (keys.w || keys.a || keys.s || keys.d) {
+                // Rotar personaje según dirección de movimiento
+                if (character && (keys.w || keys.a || keys.s || keys.d)) {
+                    const direction = new THREE.Vector3();
+                    camera.getWorldDirection(direction);
+                    direction.y = 0;
+                    direction.normalize();
+                    character.lookAt(character.position.clone().add(direction));
+                    
                     playAnimation('Walk');
-                } else {
+                } else if (character) {
                     playAnimation('Idle');
                 }
             }
