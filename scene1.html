@@ -1,378 +1,251 @@
-@@ -0,0 +1,377 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador 3D con Personaje Animado</title>
+    <title>Navegación en VR Study Room</title>
     <style>
-        body {
-            margin: 0;
-            overflow: hidden;
+        body { 
+            margin: 0; 
+            overflow: hidden; 
             font-family: Arial, sans-serif;
         }
-        #container {
+        canvas { 
+            display: block; 
+            width: 100%; 
+            height: 100%; 
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            z-index: 100;
+        }
+        #blocker {
             position: absolute;
             width: 100%;
             height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
         }
         #instructions {
-            position: absolute;
-            width: 100%;
-            top: 50%;
-            left: 0;
-            transform: translateY(-50%);
-            text-align: center;
             color: white;
-            background-color: rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 600px;
             padding: 20px;
-            z-index: 100;
-            display: block;
+            background-color: rgba(0,0,0,0.7);
+            border-radius: 10px;
         }
-        #instructions.hidden {
-            display: none;
+        #instructions button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
         }
-        #crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 20px;
-            height: 20px;
-            transform: translate(-50%, -50%);
-            z-index: 100;
-        }
-        #crosshair:before, #crosshair:after {
-            content: "";
-            position: absolute;
-            background: white;
-        }
-        #crosshair:before {
-            width: 2px;
-            height: 20px;
-            left: 9px;
-            top: 0;
-        }
-        #crosshair:after {
-            width: 20px;
-            height: 2px;
-            left: 0;
-            top: 9px;
+        #instructions button:hover {
+            background-color: #45a049;
         }
     </style>
 </head>
 <body>
-    <div id="container"></div>
-    <div id="instructions">
-        <h2>Visualizador 3D Interior</h2>
-        <p>Haz clic en la pantalla para activar los controles</p>
-        <p>Usa WASD para moverte, el ratón para mirar alrededor</p>
-        <p>Presiona ESC para salir del modo PointerLock</p>
+    <div id="info">VR Study Room - Haz clic para comenzar</div>
+    <div id="blocker">
+        <div id="instructions">
+            <h1>VR Study Room</h1>
+            <p>Bienvenido a tu escenario de estudio en realidad virtual.</p>
+            <p>Controles:</p>
+            <ul style="text-align: left; display: inline-block;">
+                <li>WASD: Movimiento</li>
+                <li>Ratón: Mirar alrededor</li>
+                <li>Click izquierdo: Activar controles</li>
+                <li>ESC: Salir de los controles</li>
+            </ul>
+            <button id="startButton">Comenzar Experiencia</button>
+        </div>
     </div>
-    <div id="crosshair"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
-    
     <script>
         // Variables globales
-        let camera, scene, renderer, controls, model, character;
-        let mixer, clock, animations, currentAction;
-        const moveSpeed = 3;
-        const keys = {
-            w: false, a: false, s: false, d: false
-        };
+        let camera, scene, renderer, controls, model;
+        let moveForward = false;
+        let moveBackward = false;
+        let moveLeft = false;
+        let moveRight = false;
+        let canJump = false;
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const vertex = new THREE.Vector3();
+        const color = new THREE.Color();
 
-        // Configuración de posición inicial
-        const initialPosition = {
-            x: 1.5,    // Coordenada X
-            y: 0.8,    // Altura
-            z: -2.0,   // Coordenada Z
-            lookAtX: 0, 
-            lookAtZ: 0
-        };
+        // Inicialización
+        init();
+        animate();
 
-        // Inicializar la escena
         function init() {
-            // Crear la cámara
+            // Configurar cámara
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            
-            // Crear la escena
+            camera.position.y = 1.6; // Altura aproximada de una persona
+
+            // Configurar escena
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB); // Fondo azul cielo
-            
-            // Configurar el renderizador
-            renderer = new THREE.WebGLRenderer({ 
-                antialias: true,
-                logarithmicDepthBuffer: true
-            });
+            scene.background = new THREE.Color(0x000000);
+            scene.fog = new THREE.FogExp2(0x000000, 0.001);
+
+            // Configurar renderizador
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            document.getElementById('container').appendChild(renderer.domElement);
+            document.body.appendChild(renderer.domElement);
 
-            // Habilitar clipping
-            renderer.localClippingEnabled = true;
+            // Configurar controles PointerLock
+            controls = new THREE.PointerLockControls(camera, document.body);
 
-            // Inicializar reloj para animaciones
-            clock = new THREE.Clock();
+            // Elementos de la interfaz
+            const blocker = document.getElementById('blocker');
+            const instructions = document.getElementById('instructions');
+            const startButton = document.getElementById('startButton');
 
-            // Cargar entorno y personaje
-            loadEnvironment();
-            loadCharacter();
+            // Evento para comenzar
+            startButton.addEventListener('click', function() {
+                controls.lock();
+            });
 
-            // Configurar controles
-            setupControls();
+            // Eventos de PointerLock
+            controls.addEventListener('lock', function() {
+                instructions.style.display = 'none';
+                blocker.style.display = 'none';
+            });
 
-            // Manejar redimensionamiento
+            controls.addEventListener('unlock', function() {
+                blocker.style.display = 'block';
+                instructions.style.display = '';
+            });
+
+            // Eventos de teclado
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+
+            // Cargar el modelo GLB
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                'vr_new_study_room.glb',
+                function(gltf) {
+                    model = gltf.scene;
+                    scene.add(model);
+                    
+                    // Ajustar la posición si es necesario
+                    model.position.set(0, 0, 0);
+                    
+                    console.log('Modelo cargado correctamente');
+                },
+                undefined,
+                function(error) {
+                    console.error('Error al cargar el modelo:', error);
+                    document.getElementById('info').textContent = 'Error al cargar el modelo vr_new_study_room.glb';
+                }
+            );
+
+            // Configurar luces (puedes ajustar según tu escenario)
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1).normalize();
+            scene.add(directionalLight);
+
+            // Manejar redimensionamiento de ventana
             window.addEventListener('resize', onWindowResize);
         }
 
-        // Función para cargar el entorno
-        function loadEnvironment() {
-            const loader = new THREE.GLTFLoader();
-            loader.load(
-                'vr_new_study_room.glb'
-                function(gltf) {
-                    model = gltf.scene;
-                    let spawnPointFound = false;
-                    
-                    model.traverse(function(node) {
-                        if (node.isMesh) {
-                            node.material.side = THREE.DoubleSide;
-                            node.material.needsUpdate = true;
-                            node.castShadow = true;
-                            node.receiveShadow = true;
-                            
-                            if (node.name.toLowerCase().includes('spawn') || 
-                                node.name.toLowerCase().includes('start')) {
-                                camera.position.copy(node.position);
-                                camera.position.y += 1.6;
-                                spawnPointFound = true;
-                                node.visible = false;
-                            }
-                            
-                            if (node.name.toLowerCase().includes('window') || 
-                                node.name.toLowerCase().includes('glass')) {
-                                node.material.transparent = true;
-                                node.material.opacity = 0.2;
-                            }
-                        }
-                    });
-                    
-                    scene.add(model);
-                    
-                    if (!spawnPointFound) {
-                        camera.position.set(
-                            initialPosition.x,
-                            initialPosition.y,
-                            initialPosition.z
-                        );
-                    }
-                    
-                    camera.lookAt(
-                        initialPosition.lookAtX,
-                        initialPosition.y,
-                        initialPosition.lookAtZ
-                    );
-                    
-                    // Configurar luces
-                    const box = new THREE.Box3().setFromObject(model);
-                    const center = box.getCenter(new THREE.Vector3());
-                    setupInteriorLighting(center);
-                },
-                undefined,
-                function(error) {
-                    console.error('Error al cargar el entorno:', error);
-                }
-            );
-        }
-
-        // Función para cargar el personaje animado
-        function loadCharacter() {
-            const loader = new THREE.GLTFLoader();
-            loader.load(
-                'talking.glb',
-                function(gltf) {
-                    character = gltf.scene;
-                    
-                    // Posición y escala del personaje
-                    character.position.set(1, 0, 1);
-                    character.scale.set(0.8, 0.8, 0.8);
-                    
-                    // Configurar sombras
-                    character.traverse(function(node) {
-                        if (node.isMesh) {
-                            node.castShadow = true;
-                            node.receiveShadow = true;
-                        }
-                    });
-                    
-                    // Configurar animaciones
-                    if (gltf.animations && gltf.animations.length > 0) {
-                        mixer = new THREE.AnimationMixer(character);
-                        animations = {};
-                        
-                        gltf.animations.forEach((clip) => {
-                            animations[clip.name] = mixer.clipAction(clip);
-                            animations[clip.name].clampWhenFinished = true;
-                        });
-                        
-                        // Reproducir animación inicial
-                        playAnimation('Idle');
-                    }
-                    
-                    scene.add(character);
-                },
-                undefined,
-                function(error) {
-                    console.error('Error al cargar el personaje:', error);
-                }
-            );
-        }
-
-        // Función para controlar animaciones
-        function playAnimation(name) {
-            if (mixer && animations[name]) {
-                if (currentAction) {
-                    currentAction.fadeOut(0.2);
-                }
-                
-                currentAction = animations[name];
-                currentAction.reset();
-                currentAction.fadeIn(0.2);
-                currentAction.play();
-            }
-        }
-
-        // Configurar iluminación
-        function setupInteriorLighting(roomCenter) {
-            scene.fog = new THREE.FogExp2(0x87CEEB, 0.01);
-            
-            // Luz ambiental
-            const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-            scene.add(ambientLight);
-
-            // Luz solar principal
-            const sunLight = new THREE.DirectionalLight(0xfff4c2, 1.5);
-            sunLight.position.set(5, 10, 7);
-            sunLight.castShadow = true;
-            sunLight.shadow.mapSize.width = 4096;
-            sunLight.shadow.mapSize.height = 4096;
-            sunLight.shadow.camera.near = 0.5;
-            sunLight.shadow.camera.far = 50;
-            scene.add(sunLight);
-
-            // Luces adicionales
-            const light1 = new THREE.PointLight(0xffeedd, 0.8, 10, 2);
-            light1.position.set(roomCenter.x + 3, 2.5, roomCenter.z);
-            light1.castShadow = true;
-            scene.add(light1);
-
-            const light2 = new THREE.PointLight(0xddddff, 0.6, 10, 2);
-            light2.position.set(roomCenter.x - 3, 2.5, roomCenter.z + 2);
-            light2.castShadow = true;
-            scene.add(light2);
-
-            // Luz de relleno
-            const fillLight = new THREE.DirectionalLight(0xccffff, 0.4);
-            fillLight.position.set(-3, 5, 2);
-            scene.add(fillLight);
-            
-            // Luces para ventanas
-            const windowLight1 = new THREE.PointLight(0xfff4c2, 1.2, 15);
-            windowLight1.position.set(roomCenter.x + 5, 2, roomCenter.z);
-            scene.add(windowLight1);
-
-            const windowLight2 = new THREE.PointLight(0xfff4c2, 1.2, 15);
-            windowLight2.position.set(roomCenter.x - 5, 2, roomCenter.z);
-            scene.add(windowLight2);
-        }
-
-        // Configurar controles
-        function setupControls() {
-            controls = new THREE.PointerLockControls(camera, document.body);
-            
-            document.addEventListener('click', function() {
-                if (!controls.isLocked) {
-                    controls.lock();
-                }
-            });
-            
-            controls.addEventListener('lock', function() {
-                document.getElementById('instructions').classList.add('hidden');
-            });
-            
-            controls.addEventListener('unlock', function() {
-                document.getElementById('instructions').classList.remove('hidden');
-            });
-            
-            document.addEventListener('keydown', onKeyDown);
-            document.addEventListener('keyup', onKeyUp);
-            
-            animate();
-        }
-
-        // Manejar teclas presionadas
-        function onKeyDown(event) {
-            switch (event.code) {
-                case 'KeyW': keys.w = true; break;
-                case 'KeyA': keys.a = true; break;
-                case 'KeyS': keys.s = true; break;
-                case 'KeyD': keys.d = true; break;
-            }
-        }
-
-        // Manejar teclas liberadas
-        function onKeyUp(event) {
-            switch (event.code) {
-                case 'KeyW': keys.w = false; break;
-                case 'KeyA': keys.a = false; break;
-                case 'KeyS': keys.s = false; break;
-                case 'KeyD': keys.d = false; break;
-            }
-        }
-
-        // Redimensionar ventana
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // Bucle de animación
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            const delta = clock.getDelta();
-            
-            // Actualizar animaciones
-            if (mixer) {
-                mixer.update(delta);
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = true;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = true;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = true;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = true;
+                    break;
+                case 'Space':
+                    if (canJump === true) velocity.y += 0.25;
+                    canJump = false;
+                    break;
             }
-            
-            // Control de movimiento
-            if (controls.isLocked) {
-                const deltaTime = moveSpeed * 0.016;
-                
-                if (keys.w) controls.moveForward(deltaTime);
-                if (keys.s) controls.moveForward(-deltaTime);
-                if (keys.a) controls.moveRight(-deltaTime);
-                if (keys.d) controls.moveRight(deltaTime);
-                
-                // Cambiar animación según movimiento
-                if (keys.w || keys.a || keys.s || keys.d) {
-                    playAnimation('Walk');
-                } else {
-                    playAnimation('Idle');
-                }
-            }
-            
-            renderer.render(scene, camera);
         }
 
-        // Iniciar la aplicación
-        init();
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = false;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = false;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = false;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = false;
+                    break;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Solo actualizar los controles si están activos
+            if (controls.isLocked === true) {
+                const delta = 0.1; // Ajusta este valor para cambiar la velocidad de movimiento
+
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize(); // Esto asegura movimientos diagonales consistentes
+
+                if (moveForward || moveBackward) velocity.z -= direction.z * 5.0 * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * 5.0 * delta;
+
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+            }
+
+            renderer.render(scene, camera);
+        }
     </script>
 </body>
 </html>
