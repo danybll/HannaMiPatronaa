@@ -223,104 +223,29 @@
             }
         }
 
- let prevTime = performance.now();
-const raycaster = new THREE.Raycaster();
-const objects = []; // Aquí se agregan los objetos colisionables al cargar GLTF
+    function animate() {
+            requestAnimationFrame(animate);
 
-function animate() {
-    requestAnimationFrame(animate);
+            // Solo actualizar los controles si están activos
+            if (controls.isLocked === true) {
+                const delta = 0.1; // Ajusta este valor para cambiar la velocidad de movimiento
 
-    const time = performance.now();
-    const delta = (time - prevTime) / 1000;
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
 
-    if (controls.isLocked === true) {
-        // Aplicar fricción
-        velocity.x -= velocity.x * 10.0 * delta;
-        velocity.z -= velocity.z * 10.0 * delta;
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize(); // Esto asegura movimientos diagonales consistentes
 
-        // Gravedad
-        velocity.y -= 9.8 * delta;
+                if (moveForward || moveBackward) velocity.z -= direction.z * 5.0 * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * 5.0 * delta;
 
-        // Dirección de movimiento
-        direction.z = Number(moveForward) - Number(moveBackward);
-        direction.x = Number(moveRight) - Number(moveLeft);
-        direction.normalize();
-
-        // Comprobar colisiones antes de mover
-        const moveDistance = 5.0 * delta;
-
-        // Adelante
-        if (moveForward) {
-            const dirVector = new THREE.Vector3();
-            controls.getDirection(dirVector);
-            raycaster.set(controls.getObject().position, dirVector);
-            const intersections = raycaster.intersectObjects(objects, true);
-            if (intersections.length === 0 || intersections[0].distance > 0.5) {
-                velocity.z -= 5.0 * delta;
-            } else {
-                velocity.z = Math.max(velocity.z, 0);
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
             }
-        }
 
-        // Atrás
-        if (moveBackward) {
-            const dirVector = new THREE.Vector3();
-            controls.getDirection(dirVector);
-            dirVector.negate();
-            raycaster.set(controls.getObject().position, dirVector);
-            const intersections = raycaster.intersectObjects(objects, true);
-            if (intersections.length === 0 || intersections[0].distance > 0.5) {
-                velocity.z += 5.0 * delta;
-            } else {
-                velocity.z = Math.min(velocity.z, 0);
-            }
-        }
-
-        // Izquierda
-        if (moveLeft) {
-            const dirVector = new THREE.Vector3();
-            controls.getDirection(dirVector);
-            dirVector.cross(camera.up).negate();
-            raycaster.set(controls.getObject().position, dirVector.normalize());
-            const intersections = raycaster.intersectObjects(objects, true);
-            if (intersections.length === 0 || intersections[0].distance > 0.5) {
-                velocity.x -= 5.0 * delta;
-            } else {
-                velocity.x = Math.max(velocity.x, 0);
-            }
-        }
-
-        // Derecha
-        if (moveRight) {
-            const dirVector = new THREE.Vector3();
-            controls.getDirection(dirVector);
-            dirVector.cross(camera.up);
-            raycaster.set(controls.getObject().position, dirVector.normalize());
-            const intersections = raycaster.intersectObjects(objects, true);
-            if (intersections.length === 0 || intersections[0].distance > 0.5) {
-                velocity.x += 5.0 * delta;
-            } else {
-                velocity.x = Math.min(velocity.x, 0);
-            }
-        }
-
-        // Aplicar movimientos
-        controls.moveRight(-velocity.x * delta);
-        controls.moveForward(-velocity.z * delta);
-
-        // Actualizar posición vertical (salto / caída)
-        controls.getObject().position.y += velocity.y * delta;
-
-        // No caer por debajo del suelo
-        if (controls.getObject().position.y < 1.6) {
-            velocity.y = 0;
-            controls.getObject().position.y = 1.6;
-            canJump = true;
-        }
-    }
-
-    renderer.render(scene, camera);
-    prevTime = time;
+            renderer.render(scene, camera);
+        
 }
 
     </script>
