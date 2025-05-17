@@ -127,6 +127,7 @@
                 // Añadir todos los meshes a la lista de colisiones
                 model.traverse(function(child) {
                     if (child.isMesh) {
+                        console.log(child.name);
                         collisionObjects.push(child);
                     }
                 });
